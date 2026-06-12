@@ -1,0 +1,30 @@
+version: "3.8"
+services:
+  amule:
+    image: ngosang/amule:latest
+    container_name: amule
+    ports:
+      - "4712:4712"
+      - "4665:4665"
+      - "4672:4672"
+    volumes:
+      - /path/to/downloads:/incoming
+      - /path/to/shared:/shared
+      - ./amule-data:/home/amule/.aMule
+    environment:
+      - AMULE_PASSWORD=my_password
+      - AMULE_CONFPATH=/home/amule/.aMule
+    restart: unless-stopped
+
+  amule-webui:
+    image: ghcr.io/neonpc/go-amule-webui:latest
+    container_name: amule-webui
+    ports:
+      - "8080:8080"
+    environment:
+      - AMULE_HOST=amule
+      - AMULE_PORT=4712
+      - AMULE_PASSWORD=my_password
+    depends_on:
+      - amule
+    restart: unless-stopped
