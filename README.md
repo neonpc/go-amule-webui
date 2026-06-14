@@ -2,6 +2,8 @@
 
 Modern web control panel for [aMule](https://github.com/amule-project/amule), written in **Go** + **Vue 3** and deployed as a Docker sidecar.
 
+The aMule Docker image used throughout this project is based on [ngosang/docker-amule](https://github.com/ngosang/docker-amule).
+
 ---
 
 ## Release
