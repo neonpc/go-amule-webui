@@ -13,7 +13,7 @@ type Client struct {
 }
 
 func NewClient(host string, port int, password string) (*Client, error) {
-	conn, err := Dial(host, port, password, 10*time.Second)
+	conn, err := Dial(host, port, password, 30*time.Second)
 	if err != nil {
 		return nil, fmt.Errorf("dial: %w", err)
 	}
