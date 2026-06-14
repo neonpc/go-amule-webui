@@ -202,10 +202,19 @@ function sortIcon(col: string): string {
 <style scoped>
 .search-page { display: flex; flex-direction: column; height: 100%; }
 .search-bar { position: sticky; top: 0; z-index: 10; background: var(--bg); display: flex; gap: 8px; padding: 8px 0; }
-input { flex: 1; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-card); color: var(--text); }
+input { flex: 1; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-card); color: var(--text); min-width: 0; }
 .ext-input { flex: 0 0 140px; }
 select { padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-card); color: var(--text); cursor: pointer; }
 button { padding: 10px 20px; background: var(--accent); color: white; border: none; border-radius: 8px; cursor: pointer; white-space: nowrap; }
+
+@media (max-width: 768px) {
+  .search-bar { flex-wrap: wrap; }
+  .search-bar input { flex: 1 1 100%; order: 2; }
+  .ext-input { flex: 1 1 auto; order: 3; min-width: 0; }
+  .search-bar select { flex: 0 1 auto; order: 4; }
+  .search-bar button { flex: 0 1 auto; order: 5; }
+  .cell-name { max-width: 180px; }
+}
 button:disabled { opacity: 0.5; cursor: default; }
 .btn-cancel { background: #ef4444; }
 .search-status { color: var(--text-muted); font-size: 0.85rem; padding: 4px 0; }

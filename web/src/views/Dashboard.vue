@@ -175,4 +175,11 @@ th { color: var(--text-muted); font-weight: 600; white-space: nowrap; }
 .pbar-wrap { display: flex; align-items: center; gap: 6px; }
 .pbar { height: 6px; border-radius: 3px; background: var(--accent); min-width: 40px; max-width: 100px; }
 .pbar-wrap span { font-size: 0.78rem; color: var(--text-muted); white-space: nowrap; }
+
+@media (max-width: 768px) {
+  .kpi-card { min-width: 80px; padding: 12px; }
+  .kpi-value { font-size: 1.2rem; }
+  .cell-name { max-width: 120px; }
+  th, td { padding: 6px 8px; font-size: 0.78rem; }
+}
 </style>

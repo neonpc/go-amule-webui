@@ -139,6 +139,12 @@ function extClass(name: string): string {
 .dir-row:hover { background: var(--bg-hover, #ffffff08); }
 .dir-children { padding-left: 20px; }
 .file-row { display: flex; align-items: center; gap: 4px; padding: 2px 4px 2px 20px; }
+
+@media (max-width: 768px) {
+  .dir-row { padding: 8px 4px; }
+  .file-row { padding: 6px 4px 6px 20px; }
+  .dir-children { padding-left: 12px; }
+}
 .arrow { font-size: 0.6rem; width: 12px; text-align: center; color: var(--text-muted); }
 .icon-dir { font-size: 0.9rem; }
 .icon-file { font-size: 0.85rem; }

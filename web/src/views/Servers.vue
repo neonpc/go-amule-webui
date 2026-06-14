@@ -106,8 +106,13 @@ async function removeServer(address: string) {
 .connected { background: #16a34a22; color: #16a34a; border: 1px solid #16a34a44; }
 .disconnected { background: #ef444422; color: #ef4444; border: 1px solid #ef444444; }
 .add-box { display: flex; gap: 8px; margin: 12px 0; }
-.add-box input { flex: 1; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-card); color: var(--text); }
+.add-box input { flex: 1; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-card); color: var(--text); min-width: 0; }
 .add-box button { padding: 10px 20px; background: var(--accent); color: white; border: none; border-radius: 8px; cursor: pointer; }
+
+@media (max-width: 768px) {
+  .add-box { flex-wrap: wrap; }
+  .add-box input { flex: 1 1 100%; }
+}
 .add-box button:disabled { opacity: 0.5; }
 .err { color: var(--err, #ef4444); font-size: 0.85rem; }
 .msg { color: var(--accent, #3b82f6); font-size: 0.85rem; }

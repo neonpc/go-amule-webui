@@ -52,6 +52,12 @@ body {
   flex-direction: column;
 }
 
+@media (max-width: 768px) {
+  .main-content {
+    padding: 24px 16px 16px 54px;
+  }
+}
+
 a {
   color: var(--accent);
   text-decoration: none;
@@ -59,5 +65,11 @@ a {
 
 a:hover {
   color: var(--accent-hover);
+}
+
+@media (max-width: 768px) {
+  button, .btn-action, .btn-connect, .btn-remove, .btn-dl {
+    min-height: 38px;
+  }
 }
 </style>

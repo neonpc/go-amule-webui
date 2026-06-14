@@ -27,6 +27,17 @@ function formatSpeed(bytes: number): string {
   min-width: 180px;
 }
 
+@media (max-width: 768px) {
+  .speed-card {
+    padding: 14px;
+    min-width: 130px;
+    flex: 1;
+  }
+  .speed-value {
+    font-size: 1.2rem;
+  }
+}
+
 .speed-label {
   font-size: 0.85rem;
   color: var(--text-muted);
