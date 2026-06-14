@@ -47,7 +47,9 @@ body {
 .main-content {
   flex: 1;
   padding: 24px;
-  overflow-y: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 a {

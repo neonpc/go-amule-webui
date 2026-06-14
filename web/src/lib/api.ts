@@ -118,10 +118,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ address }),
     }),
-  searchDownload: (hash: string) =>
+  searchDownload: (hash: string, name: string, size: number) =>
     fetchJSON<{ status: string }>('/api/search/download', {
       method: 'POST',
-      body: JSON.stringify({ hash }),
+      body: JSON.stringify({ hash, name, size }),
     }),
   ed2kAction: (action: string) =>
     fetchJSON<{ status: string }>(`/api/ed2k?action=${action}`, { method: 'POST' }),

@@ -440,15 +440,16 @@ func (s *Server) handleSearchDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Hash     string `json:"hash"`
-		Category int    `json:"category"`
+		Hash string `json:"hash"`
+		Name string `json:"name"`
+		Size uint64 `json:"size"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		sendError(w, http.StatusBadRequest, "invalid body")
 		return
 	}
-	if req.Hash == "" {
-		sendError(w, http.StatusBadRequest, "hash required")
+	if req.Hash == "" || req.Name == "" {
+		sendError(w, http.StatusBadRequest, "hash and name required")
 		return
 	}
 	c, err := s.getClient()
@@ -456,7 +457,7 @@ func (s *Server) handleSearchDownload(w http.ResponseWriter, r *http.Request) {
 		sendError(w, http.StatusServiceUnavailable, err.Error())
 		return
 	}
-	if err := c.DownloadSearchResult(req.Hash, req.Category); err != nil {
+	if err := c.DownloadSearchResult(req.Hash, req.Name, req.Size); err != nil {
 		sendError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

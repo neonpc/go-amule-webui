@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { api, Status, Download } from '../lib/api'
+import { api, Status, Download, SearchResult } from '../lib/api'
 
 export const useAmuleStore = defineStore('amule', () => {
   const status = ref<Status | null>(null)
@@ -31,5 +31,20 @@ export const useAmuleStore = defineStore('amule', () => {
     loading.value = false
   }
 
-  return { status, downloads, loading, error, refresh, fetchStatus, fetchDownloads }
+  const searchResults = ref<SearchResult[]>([])
+  const searchQuery = ref('')
+  const searchType = ref('global')
+  const searchActive = ref(false)
+  const searchExtFilter = ref('')
+
+  function setSearchResults(r: SearchResult[]) { searchResults.value = r }
+  function clearSearch() {
+    searchResults.value = []
+    searchQuery.value = ''
+    searchActive.value = false
+  }
+
+  return { status, downloads, loading, error, refresh, fetchStatus, fetchDownloads,
+    searchResults, searchQuery, searchType, searchActive, searchExtFilter,
+    setSearchResults, clearSearch }
 })

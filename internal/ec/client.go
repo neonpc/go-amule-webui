@@ -1,6 +1,7 @@
 package ec
 
 import (
+	"encoding/hex"
 	"fmt"
 	"strconv"
 	"strings"
@@ -212,28 +213,27 @@ func (c *Client) GetDownloads() ([]DownloadEntry, error) {
 }
 
 func (c *Client) CancelDownload(hash string) error {
-	return c.downloadAction(hash, 4)
+	return c.sendPartfileCmd(OpPartfileDelete, hash)
 }
 
 func (c *Client) PauseDownload(hash string) error {
-	return c.downloadAction(hash, 5)
+	return c.sendPartfileCmd(OpPartfilePause, hash)
 }
 
 func (c *Client) ResumeDownload(hash string) error {
-	return c.downloadAction(hash, 2)
+	return c.sendPartfileCmd(OpPartfileResume, hash)
 }
 
-func (c *Client) downloadAction(hash string, action uint8) error {
+func (c *Client) sendPartfileCmd(op OpCode, hash string) error {
 	var h [16]byte
-	fmt.Sscanf(hash, "%16x", &h)
+	if _, err := hex.Decode(h[:], []byte(hash)); err != nil {
+		return fmt.Errorf("invalid hash: %w", err)
+	}
 
 	resp, err := c.conn.SendRequest(&Packet{
-		OpCode: OpMiscData,
+		OpCode: op,
 		Tags: []Tag{
-			newContainerTag(TagPartfile,
-				newUint8Tag(TagPartfilePrio, action),
-				Tag{Name: TagPartfileHash, Type: TagTypeHash16, Data: h},
-			),
+			{Name: TagPartfile, Type: TagTypeHash16, Data: h},
 		},
 	})
 	if err != nil {
@@ -454,19 +454,19 @@ func (c *Client) StopSearch() error {
 	return err
 }
 
-func (c *Client) DownloadSearchResult(hash string, categoryIdx int) error {
-	var h [16]byte
-	fmt.Sscanf(hash, "%16x", &h)
-
-	searchTag := Tag{Name: TagSearchfile, Type: TagTypeHash16, Data: h}
-	searchTag.Children = []Tag{newUint32Tag(TagPartfileCat, uint32(categoryIdx))}
+func (c *Client) AddLink(link string) error {
 	_, err := c.conn.SendRequest(&Packet{
-		OpCode: OpMiscData,
+		OpCode: OpAddLink,
 		Tags: []Tag{
-			searchTag,
+			newStringTag(TagString, link),
 		},
 	})
 	return err
+}
+
+func (c *Client) DownloadSearchResult(hash string, name string, size uint64) error {
+	link := fmt.Sprintf("ed2k://|file|%s|%d|%s|/", name, size, hash)
+	return c.AddLink(link)
 }
 
 func (c *Client) GetStats() (map[string]interface{}, error) {

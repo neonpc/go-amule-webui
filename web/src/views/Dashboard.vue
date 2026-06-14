@@ -69,7 +69,7 @@ function fmtSpeed(bytes: number): string {
 }
 
 function fmtPct(pct: number): string {
-  return (pct * 100).toFixed(1) + '%'
+  return Math.min(pct, 100).toFixed(1) + '%'
 }
 </script>
 

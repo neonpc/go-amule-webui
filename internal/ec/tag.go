@@ -134,7 +134,9 @@ func writeTag(w io.Writer, tag *Tag) error {
 		copy(dataBuf, ip)
 		binary.BigEndian.PutUint16(dataBuf[4:], port)
 	case TagTypeCustom:
-		dataBuf = tag.Data.([]byte)
+		if tag.Data != nil {
+			dataBuf = tag.Data.([]byte)
+		}
 	default:
 		dataBuf = []byte{}
 	}

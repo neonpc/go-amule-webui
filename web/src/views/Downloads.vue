@@ -1,21 +1,37 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import { api, Download as D } from '../lib/api'
 
 const downloads = ref<D[]>([])
 const loading = ref(true)
 
+let timer: ReturnType<typeof setTimeout> | null = null
+
 onMounted(async () => {
+  await fetchDownloads()
+  timer = setTimeout(poll, 3000)
+})
+
+onUnmounted(() => {
+  if (timer) clearTimeout(timer)
+})
+
+async function poll() {
+  await fetchDownloads()
+  timer = setTimeout(poll, 3000)
+}
+
+async function fetchDownloads() {
   try {
     downloads.value = await api.downloads()
   } catch {}
   loading.value = false
-})
+}
 
 async function doAction(hash: string, action: string) {
   try {
     await api.downloadAction(hash, action)
-    downloads.value = await api.downloads()
+    await fetchDownloads()
   } catch (e: any) {
     alert(e.message)
   }
@@ -54,9 +70,9 @@ function fmtSize(bytes: number): string {
             <td>{{ fmtSize(d.done) }}</td>
             <td>
               <div class="bar-wrap">
-                <div class="bar-fill" :style="{ width: (d.progress * 100).toFixed(1) + '%' }" />
+                <div class="bar-fill" :style="{ width: Math.min(d.progress, 100).toFixed(1) + '%' }" />
               </div>
-              {{ (d.progress * 100).toFixed(1) }}%
+              {{ Math.min(d.progress, 100).toFixed(1) }}%
             </td>
             <td>{{ fmtSize(d.speed) }}/s</td>
             <td>{{ d.sources }}</td>

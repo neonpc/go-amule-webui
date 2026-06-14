@@ -19,6 +19,11 @@ const (
 	OpGetUloadQueue  OpCode = 0x0E
 	OpGetSharedFiles OpCode = 0x10
 	OpSharedSetPrio  OpCode = 0x11
+	OpPartfilePause  OpCode = 0x19
+	OpPartfileResume OpCode = 0x1A
+	OpPartfileStop   OpCode = 0x1B
+	OpPartfilePrioSet OpCode = 0x1C
+	OpPartfileDelete OpCode = 0x1D
 	OpDloadQueue     OpCode = 0x1F
 	OpUloadQueue     OpCode = 0x20
 	OpSharedFiles    OpCode = 0x22
@@ -67,6 +72,11 @@ var opcodeNames = map[OpCode]string{
 	OpGetUloadQueue:  "GetUloadQueue",
 	OpGetSharedFiles: "GetSharedFiles",
 	OpSharedSetPrio:  "SharedSetPrio",
+	OpPartfilePause:  "PartfilePause",
+	OpPartfileResume: "PartfileResume",
+	OpPartfileStop:   "PartfileStop",
+	OpPartfilePrioSet: "PartfilePrioSet",
+	OpPartfileDelete: "PartfileDelete",
 	OpDloadQueue:     "DloadQueue",
 	OpUloadQueue:     "UloadQueue",
 	OpSharedFiles:    "SharedFiles",
