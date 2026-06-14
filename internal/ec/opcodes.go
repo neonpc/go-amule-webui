@@ -27,8 +27,12 @@ const (
 	OpSearchResults  OpCode = 0x28
 	OpGetServerList  OpCode = 0x2C
 	OpServerList     OpCode = 0x2D
-	OpGetLog         OpCode = 0x33
-	OpLog            OpCode = 0x34
+	OpAddLogLine     OpCode = 0x33
+	OpAddDebugLogLine OpCode = 0x34
+	OpGetLog         OpCode = 0x35
+	OpGetDebugLog    OpCode = 0x36
+	OpLog            OpCode = 0x38
+	OpDebugLog       OpCode = 0x39
 	OpGetPreferences OpCode = 0x3F
 	OpSetPreferences OpCode = 0x40
 	OpGetStatsTree   OpCode = 0x46
@@ -71,8 +75,12 @@ var opcodeNames = map[OpCode]string{
 	OpSearchResults:  "SearchResults",
 	OpGetServerList:  "GetServerList",
 	OpServerList:     "ServerList",
+	OpAddLogLine:     "AddLogLine",
+	OpAddDebugLogLine: "AddDebugLogLine",
 	OpGetLog:         "GetLog",
+	OpGetDebugLog:    "GetDebugLog",
 	OpLog:            "Log",
+	OpDebugLog:       "DebugLog",
 	OpGetPreferences: "GetPreferences",
 	OpSetPreferences: "SetPreferences",
 	OpGetStatsTree:   "GetStatsTree",

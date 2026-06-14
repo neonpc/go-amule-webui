@@ -115,6 +115,10 @@ func (c *Client) GetStatus() (*StatusInfo, error) {
 			status.KadFirewalled = (v & 0x08) != 0
 			if serverName := tag.ChildByName(TagServerName); serverName != nil {
 				status.ED2KServer = serverName.StringValue()
+			} else if serverTag := tag.ChildByName(TagServer); serverTag != nil {
+				if serverName := serverTag.ChildByName(TagServerName); serverName != nil {
+					status.ED2KServer = serverName.StringValue()
+				}
 			}
 		}
 	}

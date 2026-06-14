@@ -58,6 +58,14 @@ export interface ServerEntry {
   files: number
 }
 
+export interface FSEntry {
+  name: string
+  path: string
+  is_dir: boolean
+  size: number
+  mod_time: string
+}
+
 export interface Prefs {
   [key: string]: any
 }
@@ -122,4 +130,5 @@ export const api = {
     fetchJSON<{ status: string }>(`/api/kad?action=${action}`, { method: 'POST' }),
   stats: () => fetchJSON<Record<string, number>>('/api/stats'),
   log: () => fetchJSON<string[]>('/api/log'),
+  fsBrowse: (path: string = '/media') => fetchJSON<FSEntry[]>(`/api/fs/browse?path=${encodeURIComponent(path)}`),
 }

@@ -7,6 +7,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
@@ -80,6 +82,7 @@ func (s *Server) Run() error {
 	apiMux.HandleFunc("/kad", s.handleKad)
 	apiMux.HandleFunc("/stats", s.handleStats)
 	apiMux.HandleFunc("/log", s.handleLog)
+	apiMux.HandleFunc("/fs/browse", s.handleFSBrowse)
 	mux.Handle("/api/", http.StripPrefix("/api", corsMiddleware(apiMux)))
 	mux.HandleFunc("/ws", s.handleWS)
 
@@ -579,6 +582,51 @@ func (s *Server) periodicPush() {
 		})
 		s.broadcast(data)
 	}
+}
+
+type FSEntry struct {
+	Name    string `json:"name"`
+	Path    string `json:"path"`
+	IsDir   bool   `json:"is_dir"`
+	Size    int64  `json:"size"`
+	ModTime string `json:"mod_time"`
+}
+
+func (s *Server) handleFSBrowse(w http.ResponseWriter, r *http.Request) {
+	root := r.URL.Query().Get("path")
+	if root == "" {
+		root = "/media"
+	}
+
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		sendError(w, http.StatusNotFound, "directory not found: "+err.Error())
+		return
+	}
+
+	result := make([]FSEntry, 0, len(entries))
+	for _, e := range entries {
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		result = append(result, FSEntry{
+			Name:    e.Name(),
+			Path:    filepath.Join(root, e.Name()),
+			IsDir:   e.IsDir(),
+			Size:    info.Size(),
+			ModTime: info.ModTime().Format("2006-01-02 15:04:05"),
+		})
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].IsDir != result[j].IsDir {
+			return result[i].IsDir
+		}
+		return result[i].Name < result[j].Name
+	})
+
+	sendJSON(w, result)
 }
 
 func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
