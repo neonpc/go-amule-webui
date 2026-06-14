@@ -15,6 +15,20 @@ onMounted(async () => {
     status.value = await api.status()
   } catch {}
 })
+
+async function ed2kConnect() {
+  try {
+    await api.ed2kAction('connect')
+    status.value = await api.status()
+  } catch {}
+}
+
+async function ed2kDisconnect() {
+  try {
+    await api.ed2kAction('disconnect')
+    status.value = await api.status()
+  } catch {}
+}
 </script>
 
 <template>
@@ -25,6 +39,10 @@ onMounted(async () => {
       <SpeedCard label="Download" :speed="status?.dl_speed ?? 0" color="#22c55e" />
       <SpeedCard label="Upload" :speed="status?.ul_speed ?? 0" color="#3b82f6" />
     </div>
+    <div class="actions" v-if="status">
+      <button v-if="!status.ed2k_connected" class="btn-connect" @click="ed2kConnect">Connect eD2K</button>
+      <button v-else class="btn-disconnect" @click="ed2kDisconnect">Disconnect eD2K</button>
+    </div>
     <div class="ws-indicator">
       WebSocket: {{ connected ? '🟢 Connected' : '🔴 Disconnected' }}
     </div>
@@ -32,6 +50,9 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.actions { margin-top: 16px; display: flex; gap: 8px; }
+.btn-connect { padding: 10px 20px; background: var(--accent); color: white; border: none; border-radius: 8px; cursor: pointer; }
+.btn-disconnect { padding: 10px 20px; background: #ef4444; color: white; border: none; border-radius: 8px; cursor: pointer; }
 .ws-indicator {
   margin-top: 16px;
   font-size: 0.85rem;

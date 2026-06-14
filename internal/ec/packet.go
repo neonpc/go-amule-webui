@@ -78,10 +78,10 @@ func (p *Packet) Encode() ([]byte, error) {
 	flags := PacketFlags(FlagAlways1)
 
 	var headerBuf bytes.Buffer
-	if err := binary.Write(&headerBuf, binary.LittleEndian, uint32(flags)); err != nil {
+	if err := binary.Write(&headerBuf, binary.BigEndian, uint32(flags)); err != nil {
 		return nil, err
 	}
-	if err := binary.Write(&headerBuf, binary.LittleEndian, uint32(len(appData))); err != nil {
+	if err := binary.Write(&headerBuf, binary.BigEndian, uint32(len(appData))); err != nil {
 		return nil, err
 	}
 
@@ -91,13 +91,13 @@ func (p *Packet) Encode() ([]byte, error) {
 func DecodePacket(data []byte) (*Packet, error) {
 	r := bytes.NewReader(data)
 
-	flagsRaw, err := readUint32LE(r)
+	flagsRaw, err := readUint32(r)
 	if err != nil {
 		return nil, fmt.Errorf("read flags: %w", err)
 	}
 	flags := PacketFlags(flagsRaw)
 
-	appLen, err := readUint32LE(r)
+	appLen, err := readUint32(r)
 	if err != nil {
 		return nil, fmt.Errorf("read app length: %w", err)
 	}
@@ -111,30 +111,32 @@ func DecodePacket(data []byte) (*Packet, error) {
 		return nil, fmt.Errorf("zlib compression not implemented")
 	}
 
+	useUTF8 := flags&FlagUTF8Numbers != 0
+
 	ar := bytes.NewReader(appData)
 
-	opRaw, err := readUint8(ar)
+	opRaw, err := readNum(ar, useUTF8, 8)
 	if err != nil {
 		return nil, fmt.Errorf("read opcode: %w", err)
 	}
 	packet := &Packet{OpCode: OpCode(opRaw)}
 
-	tagCountRaw, err := readUint16(ar)
+	tagCountRaw, err := readNum(ar, useUTF8, 16)
 	if err != nil {
 		return nil, fmt.Errorf("read tag count: %w", err)
 	}
 	tagCount := uint32(tagCountRaw)
 
 	if tagCountRaw == 0xFFFF && flags&FlagLargeTagCount != 0 {
-		extCount, err := readUint32(ar)
+		extCount, err := readNum(ar, useUTF8, 32)
 		if err != nil {
 			return nil, fmt.Errorf("read extended tag count: %w", err)
 		}
-		tagCount = extCount
+		tagCount = uint32(extCount)
 	}
 
 	for i := uint32(0); i < tagCount; i++ {
-		tag, err := readTag(ar)
+		tag, err := readTag(ar, useUTF8)
 		if err != nil {
 			return nil, fmt.Errorf("read tag %d: %w", i, err)
 		}

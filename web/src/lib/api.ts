@@ -65,10 +65,14 @@ export interface Prefs {
 const BASE = ''
 
 async function fetchJSON<T>(url: string, opts?: RequestInit): Promise<T> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 15000)
   const res = await fetch(`${BASE}${url}`, {
     headers: { 'Content-Type': 'application/json' },
     ...opts,
+    signal: controller.signal,
   })
+  clearTimeout(timer)
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }))
     throw new Error(err.error || res.statusText)
@@ -80,7 +84,7 @@ export const api = {
   status: () => fetchJSON<Status>('/api/status'),
   downloads: () => fetchJSON<Download[]>('/api/downloads'),
   downloadAction: (hash: string, action: string) =>
-    fetchJSON<{ status: string }>(`/api/downloads/${hash}?hash=${hash}&action=${action}`, { method: 'POST' }),
+    fetchJSON<{ status: string }>(`/api/downloads?hash=${hash}&action=${action}`, { method: 'POST' }),
   uploads: () => fetchJSON<Upload[]>('/api/uploads'),
   shared: () => fetchJSON<SharedFile[]>('/api/shared'),
   search: (query: string, type: string = 'global') =>
@@ -91,6 +95,28 @@ export const api = {
   searchResults: () => fetchJSON<SearchResult[]>('/api/search/results'),
   searchStop: () => fetchJSON<{ status: string }>('/api/search/stop'),
   servers: () => fetchJSON<ServerEntry[]>('/api/servers'),
+  serverAdd: (address: string, name?: string) =>
+    fetchJSON<{ status: string }>('/api/servers/add', {
+      method: 'POST',
+      body: JSON.stringify({ address, name: name || '' }),
+    }),
+  serverConnect: (address: string) =>
+    fetchJSON<{ status: string }>('/api/servers/connect', {
+      method: 'POST',
+      body: JSON.stringify({ address }),
+    }),
+  serverRemove: (address: string) =>
+    fetchJSON<{ status: string }>('/api/servers/remove', {
+      method: 'POST',
+      body: JSON.stringify({ address }),
+    }),
+  searchDownload: (hash: string) =>
+    fetchJSON<{ status: string }>('/api/search/download', {
+      method: 'POST',
+      body: JSON.stringify({ hash }),
+    }),
+  ed2kAction: (action: string) =>
+    fetchJSON<{ status: string }>(`/api/ed2k?action=${action}`, { method: 'POST' }),
   kad: () => fetchJSON<{ connected: boolean; firewalled: boolean }>('/api/kad'),
   kadAction: (action: string) =>
     fetchJSON<{ status: string }>(`/api/kad?action=${action}`, { method: 'POST' }),

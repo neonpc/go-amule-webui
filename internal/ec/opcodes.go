@@ -33,11 +33,17 @@ const (
 	OpSetPreferences OpCode = 0x40
 	OpGetStatsTree   OpCode = 0x46
 	OpStatsTree      OpCode = 0x47
-	OpKadStart       OpCode = 0x48
-	OpKadStop        OpCode = 0x49
-	OpAuthSalt       OpCode = 0x4F
-	OpAuthPasswd     OpCode = 0x50
-	OpFriend         OpCode = 0x57
+	OpKadStart        OpCode = 0x48
+	OpKadStop         OpCode = 0x49
+	OpConnect         OpCode = 0x4A
+	OpDisconnect      OpCode = 0x4B
+	OpAuthSalt        OpCode = 0x4F
+	OpAuthPasswd      OpCode = 0x50
+	OpFriend          OpCode = 0x57
+	OpServerDisconnect OpCode = 0x2E
+	OpServerConnect   OpCode = 0x2F
+	OpServerRemove    OpCode = 0x30
+	OpServerAdd       OpCode = 0x31
 )
 
 var opcodeNames = map[OpCode]string{
@@ -71,11 +77,17 @@ var opcodeNames = map[OpCode]string{
 	OpSetPreferences: "SetPreferences",
 	OpGetStatsTree:   "GetStatsTree",
 	OpStatsTree:      "StatsTree",
-	OpKadStart:       "KadStart",
-	OpKadStop:        "KadStop",
-	OpAuthSalt:       "AuthSalt",
-	OpAuthPasswd:     "AuthPasswd",
-	OpFriend:         "Friend",
+	OpKadStart:        "KadStart",
+	OpKadStop:         "KadStop",
+	OpConnect:         "Connect",
+	OpDisconnect:      "Disconnect",
+	OpAuthSalt:        "AuthSalt",
+	OpAuthPasswd:      "AuthPasswd",
+	OpFriend:          "Friend",
+	OpServerDisconnect: "ServerDisconnect",
+	OpServerConnect:   "ServerConnect",
+	OpServerRemove:    "ServerRemove",
+	OpServerAdd:       "ServerAdd",
 }
 
 func (o OpCode) String() string {

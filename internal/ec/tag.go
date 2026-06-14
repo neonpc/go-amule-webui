@@ -1,10 +1,13 @@
 package ec
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
 	"net"
+	"strconv"
+	"strings"
 )
 
 type Tag struct {
@@ -76,7 +79,7 @@ func (t *Tag) HashValue() [16]byte {
 }
 
 func writeTag(w io.Writer, tag *Tag) error {
-	nameVal := uint16(tag.Name)
+	nameVal := uint16(tag.Name) << 1
 	hasChildren := len(tag.Children) > 0
 	if hasChildren {
 		nameVal |= 1
@@ -122,8 +125,11 @@ func writeTag(w io.Writer, tag *Tag) error {
 		}
 		dataBuf = h[:]
 	case TagTypeIPV4:
-		ip := tag.Data.(net.IP).To4()
-		port := tag.Data.(uint16) // port stored separately in the IPV4 type
+		addr := tag.Data.(string)
+		parts := strings.Split(addr, ":")
+		ip := net.ParseIP(parts[0]).To4()
+		p, _ := strconv.ParseUint(parts[1], 10, 16)
+		port := uint16(p)
 		dataBuf = make([]byte, 6)
 		copy(dataBuf, ip)
 		binary.BigEndian.PutUint16(dataBuf[4:], port)
@@ -135,7 +141,6 @@ func writeTag(w io.Writer, tag *Tag) error {
 
 	totalLen := len(dataBuf)
 	if hasChildren {
-		totalLen += 2 // sub count uint16
 		for _, child := range tag.Children {
 			totalLen += tagEncodedLen(&child)
 		}
@@ -166,9 +171,9 @@ func writeTag(w io.Writer, tag *Tag) error {
 }
 
 func tagEncodedLen(tag *Tag) int {
-	nameLen := 2        // uint16 tagname
-	typeLen := 1        // uint8 tagtype
-	lenFieldLen := 4    // uint32 taglen
+	nameLen := 2
+	typeLen := 1
+	lenFieldLen := 4
 	base := nameLen + typeLen + lenFieldLen
 
 	var dataLen int
@@ -192,7 +197,7 @@ func tagEncodedLen(tag *Tag) int {
 	}
 
 	if len(tag.Children) > 0 {
-		dataLen += 2 // sub count
+		dataLen += 2
 		for _, child := range tag.Children {
 			dataLen += tagEncodedLen(&child)
 		}
@@ -201,55 +206,64 @@ func tagEncodedLen(tag *Tag) int {
 	return base + dataLen
 }
 
-func readTag(r io.Reader) (Tag, error) {
+func readTag(r *bytes.Reader, useUTF8 bool) (Tag, error) {
 	var tag Tag
 
-	nameRaw, err := readUint16(r)
+	nameRaw, err := readNum(r, useUTF8, 16)
 	if err != nil {
 		return tag, err
 	}
 
 	hasChildren := (nameRaw & 1) != 0
-	tag.Name = TagName(nameRaw & 0xFFFE)
+	tag.Name = TagName(nameRaw >> 1)
 
-	tagType, err := readUint8(r)
+	tagType, err := readNum(r, useUTF8, 8)
 	if err != nil {
 		return tag, err
 	}
 	tag.Type = TagType(tagType)
 
-	tagLen, err := readUint32(r)
+	tagLen, err := readNum(r, useUTF8, 32)
 	if err != nil {
 		return tag, err
 	}
 
-	remaining := int64(tagLen)
-
-	var subCount uint16
 	if hasChildren {
-		subCount, err = readUint16(r)
+		subCount, err := readNum(r, useUTF8, 16)
 		if err != nil {
 			return tag, err
 		}
-		remaining -= 2
-	}
-
-	if hasChildren {
-		for i := uint16(0); i < subCount; i++ {
-			child, err := readTag(r)
+		for i := uint64(0); i < subCount; i++ {
+			child, err := readTag(r, useUTF8)
 			if err != nil {
-				return tag, err
+				break
 			}
 			tag.Children = append(tag.Children, child)
-			remaining -= int64(tagEncodedLen(&child))
 		}
 	}
 
-	if remaining > 0 {
-		dataBuf := make([]byte, remaining)
-		if _, err := io.ReadFull(r, dataBuf); err != nil {
-			return tag, err
+	// Compute children's fixed-size wire length (matching C++ GetTagLen)
+	// so that dataLen = tagLen - childrenLen gives the correct raw data size.
+	var childrenLen uint64
+	for i := range tag.Children {
+		childrenLen += uint64(tagWireDataLen(&tag.Children[i]))
+		childrenLen += 2 + 1 + 4 // sizeof(ec_tagname_t) + sizeof(ec_tagtype_t) + sizeof(ec_taglen_t)
+		if len(tag.Children[i].Children) > 0 {
+			childrenLen += 2 // sizeof(uint16) for subCount
 		}
+	}
+
+	dataRemaining := int64(tagLen) - int64(childrenLen)
+	if dataRemaining < 0 {
+		dataRemaining = 0
+	}
+	if dataRemaining > int64(r.Len()) {
+		dataRemaining = int64(r.Len())
+	}
+
+	if dataRemaining > 0 {
+		dataBuf := make([]byte, dataRemaining)
+		io.ReadFull(r, dataBuf)
 
 		switch tag.Type {
 		case TagTypeUint8:
@@ -292,6 +306,44 @@ func readTag(r io.Reader) (Tag, error) {
 	}
 
 	return tag, nil
+}
+
+// tagWireDataLen computes the C++ GetTagLen() equivalent:
+// data + children (excluding own header).
+func tagWireDataLen(tag *Tag) int {
+	var length int
+	switch tag.Type {
+	case TagTypeUint8:
+		length = 1
+	case TagTypeUint16:
+		length = 2
+	case TagTypeUint32:
+		length = 4
+	case TagTypeUint64:
+		length = 8
+	case TagTypeString:
+		if s, ok := tag.Data.(string); ok {
+			length = len(s) + 1
+		}
+	case TagTypeHash16:
+		length = 16
+	case TagTypeIPV4:
+		length = 6
+	case TagTypeUint128:
+		length = 16
+	default:
+		if buf, ok := tag.Data.([]byte); ok {
+			length = len(buf)
+		}
+	}
+	for i := range tag.Children {
+		length += tagWireDataLen(&tag.Children[i])
+		length += 2 + 1 + 4
+		if len(tag.Children[i].Children) > 0 {
+			length += 2
+		}
+	}
+	return length
 }
 
 func newStringTag(name TagName, val string) Tag {

@@ -12,6 +12,15 @@ onMounted(async () => {
   loading.value = false
 })
 
+async function doAction(hash: string, action: string) {
+  try {
+    await api.downloadAction(hash, action)
+    downloads.value = await api.downloads()
+  } catch (e: any) {
+    alert(e.message)
+  }
+}
+
 function fmtSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`
@@ -35,6 +44,7 @@ function fmtSize(bytes: number): string {
             <th>Speed</th>
             <th>Sources</th>
             <th>Status</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
@@ -51,6 +61,11 @@ function fmtSize(bytes: number): string {
             <td>{{ fmtSize(d.speed) }}/s</td>
             <td>{{ d.sources }}</td>
             <td>{{ d.status }}</td>
+            <td>
+              <button v-if="d.paused" class="btn-action" @click="doAction(d.hash, 'resume')">Resume</button>
+              <button v-else class="btn-action btn-pause" @click="doAction(d.hash, 'pause')">Pause</button>
+              <button class="btn-action btn-cancel" @click="doAction(d.hash, 'cancel')">Cancel</button>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -65,4 +80,7 @@ th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--bo
 th { color: var(--text-muted); font-weight: 600; }
 .bar-wrap { width: 100px; height: 6px; background: var(--border); border-radius: 3px; display: inline-block; vertical-align: middle; margin-right: 8px; }
 .bar-fill { height: 100%; background: var(--accent); border-radius: 3px; }
+.btn-action { padding: 4px 10px; border: none; border-radius: 4px; cursor: pointer; font-size: 0.8rem; margin-right: 4px; background: var(--accent); color: white; }
+.btn-pause { background: #f59e0b; }
+.btn-cancel { background: #ef4444; }
 </style>

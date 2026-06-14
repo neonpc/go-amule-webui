@@ -18,6 +18,8 @@ type Conn struct {
 	host     string
 	port     int
 	version  string
+	canUTF8  bool
+	timeout  time.Duration
 }
 
 func Dial(host string, port int, password string, timeout time.Duration) (*Conn, error) {
@@ -33,6 +35,7 @@ func Dial(host string, port int, password string, timeout time.Duration) (*Conn,
 		password: password,
 		host:     host,
 		port:     port,
+		timeout:  timeout,
 	}
 	return c, nil
 }
@@ -42,7 +45,7 @@ func (c *Conn) Close() error {
 }
 
 func (c *Conn) Authenticate() error {
-	req := buildAuthRequest(c.password)
+	req := buildAuthRequest()
 	data, err := req.Encode()
 	if err != nil {
 		return fmt.Errorf("encode auth: %w", err)
@@ -67,11 +70,15 @@ func (c *Conn) Authenticate() error {
 		}
 		return nil
 	case OpAuthSalt:
-		saltTag := resp.TagByName(TagString)
+		saltTag := resp.TagByName(TagPasswdSalt)
 		if saltTag == nil {
 			return fmt.Errorf("auth salt without salt data")
 		}
-		saltResp := buildSaltAuthResponse(c.password, saltTag.StringValue())
+		saltVal, ok := saltTag.Data.(uint64)
+		if !ok {
+			return fmt.Errorf("auth salt has unexpected type: %T", saltTag.Data)
+		}
+		saltResp := buildSaltAuthResponse(c.password, saltVal)
 		data, err := saltResp.Encode()
 		if err != nil {
 			return fmt.Errorf("encode salt response: %w", err)
@@ -115,18 +122,19 @@ func (c *Conn) SendRequest(packet *Packet) (*Packet, error) {
 }
 
 func (c *Conn) ReadPacket() (*Packet, error) {
+	_ = c.conn.SetReadDeadline(time.Now().Add(c.timeout))
 	flagsBuf := make([]byte, 4)
 	if _, err := io.ReadFull(c.reader, flagsBuf); err != nil {
 		return nil, fmt.Errorf("read flags: %w", err)
 	}
 
-	flags := binary.LittleEndian.Uint32(flagsBuf)
+	flags := binary.BigEndian.Uint32(flagsBuf)
 
 	lenBuf := make([]byte, 4)
 	if _, err := io.ReadFull(c.reader, lenBuf); err != nil {
 		return nil, fmt.Errorf("read length: %w", err)
 	}
-	appLen := binary.LittleEndian.Uint32(lenBuf)
+	appLen := binary.BigEndian.Uint32(lenBuf)
 
 	appData := make([]byte, appLen)
 	if _, err := io.ReadFull(c.reader, appData); err != nil {
@@ -141,7 +149,7 @@ func (c *Conn) ReadPacket() (*Packet, error) {
 		return nil, fmt.Errorf("decode: %w", err)
 	}
 
-	_ = flags
+	c.canUTF8 = c.canUTF8 || (PacketFlags(flags)&FlagUTF8Numbers != 0)
 	return packet, nil
 }
 

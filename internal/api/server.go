@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -61,25 +62,54 @@ func (s *Server) Run() error {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/status", s.handleStatus)
-	mux.HandleFunc("/api/downloads", s.handleDownloads)
-	mux.HandleFunc("/api/uploads", s.handleUploads)
-	mux.HandleFunc("/api/shared", s.handleShared)
-	mux.HandleFunc("/api/search", s.handleSearch)
-	mux.HandleFunc("/api/search/results", s.handleSearchResults)
-	mux.HandleFunc("/api/search/stop", s.handleSearchStop)
-	mux.HandleFunc("/api/servers", s.handleServers)
-	mux.HandleFunc("/api/kad", s.handleKad)
-	mux.HandleFunc("/api/stats", s.handleStats)
-	mux.HandleFunc("/api/log", s.handleLog)
+
+	apiMux := http.NewServeMux()
+	apiMux.HandleFunc("/status", s.handleStatus)
+	apiMux.HandleFunc("/downloads", s.handleDownloads)
+	apiMux.HandleFunc("/uploads", s.handleUploads)
+	apiMux.HandleFunc("/shared", s.handleShared)
+	apiMux.HandleFunc("/search", s.handleSearch)
+	apiMux.HandleFunc("/search/results", s.handleSearchResults)
+	apiMux.HandleFunc("/search/stop", s.handleSearchStop)
+	apiMux.HandleFunc("/servers", s.handleServers)
+	apiMux.HandleFunc("/servers/add", s.handleServerAdd)
+	apiMux.HandleFunc("/servers/connect", s.handleServerConnect)
+	apiMux.HandleFunc("/servers/remove", s.handleServerRemove)
+	apiMux.HandleFunc("/search/download", s.handleSearchDownload)
+	apiMux.HandleFunc("/ed2k", s.handleED2K)
+	apiMux.HandleFunc("/kad", s.handleKad)
+	apiMux.HandleFunc("/stats", s.handleStats)
+	apiMux.HandleFunc("/log", s.handleLog)
+	mux.Handle("/api/", http.StripPrefix("/api", corsMiddleware(apiMux)))
 	mux.HandleFunc("/ws", s.handleWS)
+
+	dist := os.Getenv("AMULE_WEB_DIR")
+	if dist == "" {
+		dist = "web/dist"
+	}
+	if fi, err := os.Stat(dist); err == nil && fi.IsDir() {
+		log.Printf("Serving web UI from %s", dist)
+		fs := http.FileServer(http.Dir(dist))
+		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/" {
+				path := dist + r.URL.Path
+				if _, err := os.Stat(path); os.IsNotExist(err) {
+					http.ServeFile(w, r, dist+"/index.html")
+					return
+				}
+			}
+			fs.ServeHTTP(w, r)
+		})
+	} else {
+		log.Print("No web UI found at web/dist — API only")
+	}
 
 	go s.runWSHub()
 	go s.periodicPush()
 
 	log.Printf("Listening on %s", s.listenAddr)
 	log.Printf("Connected to aMule at %s:%d", s.amuleHost, s.amulePort)
-	return http.ListenAndServe(s.listenAddr, corsMiddleware(mux))
+	return http.ListenAndServe(s.listenAddr, mux)
 }
 
 func corsMiddleware(next http.Handler) http.Handler {
@@ -287,6 +317,147 @@ func (s *Server) handleServers(w http.ResponseWriter, r *http.Request) {
 		sv = []ec.ServerEntry{}
 	}
 	sendJSON(w, sv)
+}
+
+func (s *Server) handleED2K(w http.ResponseWriter, r *http.Request) {
+	c, err := s.getClient()
+	if err != nil {
+		sendError(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
+	if r.Method != "POST" {
+		sendError(w, http.StatusMethodNotAllowed, "POST required")
+		return
+	}
+	action := r.URL.Query().Get("action")
+	switch action {
+	case "connect":
+		err = c.ConnectED2K()
+	case "disconnect":
+		err = c.DisconnectED2K()
+	default:
+		sendError(w, http.StatusBadRequest, "unknown action: "+action)
+		return
+	}
+	if err != nil {
+		sendError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	sendJSON(w, map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleServerConnect(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		sendError(w, http.StatusMethodNotAllowed, "POST required")
+		return
+	}
+	var req struct {
+		Address string `json:"address"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		sendError(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	if req.Address == "" {
+		sendError(w, http.StatusBadRequest, "address required")
+		return
+	}
+	c, err := s.getClient()
+	if err != nil {
+		sendError(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
+	if err := c.ConnectToServer(req.Address); err != nil {
+		sendError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	sendJSON(w, map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleServerAdd(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		sendError(w, http.StatusMethodNotAllowed, "POST required")
+		return
+	}
+	var req struct {
+		Address string `json:"address"`
+		Name    string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		sendError(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	if req.Address == "" {
+		sendError(w, http.StatusBadRequest, "address required")
+		return
+	}
+	c, err := s.getClient()
+	if err != nil {
+		sendError(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
+	if err := c.AddServer(req.Address, req.Name); err != nil {
+		sendError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	sendJSON(w, map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleServerRemove(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		sendError(w, http.StatusMethodNotAllowed, "POST required")
+		return
+	}
+	var req struct {
+		Address string `json:"address"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		sendError(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	if req.Address == "" {
+		sendError(w, http.StatusBadRequest, "address required")
+		return
+	}
+	c, err := s.getClient()
+	if err != nil {
+		sendError(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
+	if err := c.RemoveServer(req.Address); err != nil {
+		sendError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	sendJSON(w, map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleSearchDownload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		sendError(w, http.StatusMethodNotAllowed, "POST required")
+		return
+	}
+	var req struct {
+		Hash     string `json:"hash"`
+		Category int    `json:"category"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		sendError(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	if req.Hash == "" {
+		sendError(w, http.StatusBadRequest, "hash required")
+		return
+	}
+	c, err := s.getClient()
+	if err != nil {
+		sendError(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
+	if err := c.DownloadSearchResult(req.Hash, req.Category); err != nil {
+		sendError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	sendJSON(w, map[string]string{"status": "ok"})
 }
 
 func (s *Server) handleKad(w http.ResponseWriter, r *http.Request) {

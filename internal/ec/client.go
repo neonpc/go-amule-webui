@@ -108,16 +108,16 @@ func (c *Client) GetStatus() (*StatusInfo, error) {
 
 	for _, tag := range resp.Tags {
 		switch tag.Name {
-		case TagStatsConnState:
-			status.ED2KConnected = tag.UintValue() == 1
-		case TagStatsKadState:
-			status.KadConnected = tag.UintValue() == 1 || tag.UintValue() == 3
-			status.KadFirewalled = tag.UintValue() == 2 || tag.UintValue() == 3
-		case TagClientName:
-			status.ED2KServer = tag.StringValue()
+		case TagConnState:
+			v := tag.UintValue()
+			status.ED2KConnected = (v & 0x01) != 0
+			status.KadConnected = (v & 0x04) != 0
+			status.KadFirewalled = (v & 0x08) != 0
+			if serverName := tag.ChildByName(TagServerName); serverName != nil {
+				status.ED2KServer = serverName.StringValue()
+			}
 		}
 	}
-	_ = status.ED2KID
 
 	return status, nil
 }
@@ -141,9 +141,12 @@ func (c *Client) GetDownloads() ([]DownloadEntry, error) {
 	}
 
 	var downloads []DownloadEntry
-	partfiles := resp.ChildrenByName(TagPartfile)
 
-	for _, pf := range partfiles {
+	for _, t := range resp.Tags {
+		if t.Name != TagPartfile {
+			continue
+		}
+		pf := t
 		var entry DownloadEntry
 
 		if name := pf.ChildByName(TagPartfileName); name != nil {
@@ -155,22 +158,34 @@ func (c *Client) GetDownloads() ([]DownloadEntry, error) {
 		if size := pf.ChildByName(TagPartfileSize); size != nil {
 			entry.Size = size.UintValue()
 		}
-		if done := pf.ChildByName(TagPartfileDone); done != nil {
+		if done := pf.ChildByName(TagPartfileSizeDone); done != nil {
+			entry.Done = done.UintValue()
+		} else if done := pf.ChildByName(TagPartfileDone); done != nil {
 			entry.Done = done.UintValue()
 		}
 		if speed := pf.ChildByName(TagPartfileSpeed); speed != nil {
 			entry.Speed = uint32(speed.UintValue())
 		}
-		if src := pf.ChildByName(TagPartfileSources); src != nil {
+		if src := pf.ChildByName(TagPartfileSourceCount); src != nil {
+			entry.Sources = uint32(src.UintValue())
+		} else if src := pf.ChildByName(TagPartfileSources); src != nil {
 			entry.Sources = uint32(src.UintValue())
 		}
-		if prio := pf.ChildByName(TagPartfilePrio); prio != nil {
+		if prio := pf.ChildByName(TagPartfilePriority); prio != nil {
+			entry.Priority = uint8(prio.UintValue())
+		} else if prio := pf.ChildByName(TagPartfilePrio); prio != nil {
 			entry.Priority = uint8(prio.UintValue())
 		}
 		if cat := pf.ChildByName(TagPartfileCat); cat != nil {
-			entry.Category = cat.StringValue()
+			if s := cat.StringValue(); s != "" {
+				entry.Category = s
+			} else {
+				entry.Category = fmt.Sprintf("%d", cat.UintValue())
+			}
 		}
-		if paused := pf.ChildByName(TagPartfilePaused); paused != nil {
+		if paused := pf.ChildByName(TagPartfileStopped); paused != nil {
+			entry.Paused = paused.UintValue() == 1
+		} else if paused := pf.ChildByName(TagPartfilePaused); paused != nil {
 			entry.Paused = paused.UintValue() == 1
 		}
 
@@ -241,9 +256,12 @@ func (c *Client) GetUploads() ([]UploadEntry, error) {
 	}
 
 	var uploads []UploadEntry
-	clients := resp.ChildrenByName(TagClient)
 
-	for _, cl := range clients {
+	for _, t := range resp.Tags {
+		if t.Name != TagClient {
+			continue
+		}
+		cl := t
 		var entry UploadEntry
 		if name := cl.ChildByName(TagClientNameF); name != nil {
 			entry.Client = name.StringValue()
@@ -275,17 +293,18 @@ func (c *Client) GetSharedFiles() ([]SharedFile, error) {
 	}
 
 	var files []SharedFile
-	knownfiles := resp.ChildrenByName(TagKnownfile)
-
-	for _, kf := range knownfiles {
+	for _, t := range resp.Tags {
+		if t.Name != TagKnownfile {
+			continue
+		}
 		var entry SharedFile
-		if name := kf.ChildByName(TagKnownfileName); name != nil {
+		if name := t.ChildByName(TagPartfileName); name != nil {
 			entry.Name = name.StringValue()
 		}
-		if hash := kf.ChildByName(TagKnownfileHash); hash != nil {
+		if hash := t.ChildByName(TagPartfileHash); hash != nil {
 			entry.Hash = fmt.Sprintf("%x", hash.HashValue())
 		}
-		if size := kf.ChildByName(TagKnownfileSize); size != nil {
+		if size := t.ChildByName(TagPartfileSize); size != nil {
 			entry.Size = size.UintValue()
 		}
 		files = append(files, entry)
@@ -309,9 +328,11 @@ func (c *Client) GetServers() ([]ServerEntry, error) {
 	}
 
 	var servers []ServerEntry
-	serverTags := resp.ChildrenByName(TagServer)
 
-	for _, st := range serverTags {
+	for _, st := range resp.Tags {
+		if st.Name != TagServer {
+			continue
+		}
 		var entry ServerEntry
 		if name := st.ChildByName(TagServerName); name != nil {
 			entry.Name = name.StringValue()
@@ -319,7 +340,14 @@ func (c *Client) GetServers() ([]ServerEntry, error) {
 		if desc := st.ChildByName(TagServerDesc); desc != nil {
 			entry.Desc = desc.StringValue()
 		}
-		if addr := st.ChildByName(TagServerAddress); addr != nil {
+		if st.Type == TagTypeIPV4 {
+			entry.Address = st.StringValue()
+			if parts := strings.Split(entry.Address, ":"); len(parts) == 2 {
+				entry.IP = parts[0]
+				p, _ := strconv.ParseUint(parts[1], 10, 16)
+				entry.Port = uint16(p)
+			}
+		} else if addr := st.ChildByName(TagServerAddress); addr != nil {
 			entry.Address = addr.StringValue()
 			if parts := strings.Split(entry.Address, ":"); len(parts) == 2 {
 				entry.IP = parts[0]
@@ -350,12 +378,21 @@ func (c *Client) Search(query string, searchType string, avail string, minSize, 
 		stype = 0
 	}
 
+	searchTag := Tag{Name: TagSearchType, Type: TagTypeUint32, Data: stype}
+	searchTag.Children = []Tag{
+		newStringTag(TagSearchName, query),
+	}
+	if minSize > 0 {
+		searchTag.Children = append(searchTag.Children, newUint64Tag(TagSearchMinSize, minSize))
+	}
+	if maxSize > 0 {
+		searchTag.Children = append(searchTag.Children, newUint64Tag(TagSearchMaxSize, maxSize))
+	}
+
 	_, err := c.conn.SendRequest(&Packet{
 		OpCode: OpSearchStart,
 		Tags: []Tag{
-			newStringTag(TagString, query),
-			newUint32Tag(TagDetailLevel, uint32(DetailWEB)),
-			newUint32Tag(TagPartfileStatus, stype),
+			searchTag,
 		},
 	})
 	if err != nil {
@@ -363,8 +400,6 @@ func (c *Client) Search(query string, searchType string, avail string, minSize, 
 	}
 
 	_ = avail
-	_ = minSize
-	_ = maxSize
 	return nil
 }
 
@@ -383,20 +418,23 @@ func (c *Client) GetSearchResults() ([]SearchResult, error) {
 	}
 
 	var results []SearchResult
-	searchfiles := resp.ChildrenByName(TagSearchfile)
 
-	for _, sf := range searchfiles {
+	for _, t := range resp.Tags {
+		if t.Name != TagSearchfile {
+			continue
+		}
+		sf := t
 		var entry SearchResult
-		if name := sf.ChildByName(TagSearchfileName); name != nil {
+		if name := sf.ChildByName(TagPartfileName); name != nil {
 			entry.Name = name.StringValue()
 		}
-		if hash := sf.ChildByName(TagSearchfileHash); hash != nil {
+		if hash := sf.ChildByName(TagPartfileHash); hash != nil {
 			entry.Hash = fmt.Sprintf("%x", hash.HashValue())
 		}
-		if size := sf.ChildByName(TagSearchfileSize); size != nil {
+		if size := sf.ChildByName(TagPartfileSize); size != nil {
 			entry.Size = size.UintValue()
 		}
-		if src := sf.ChildByName(TagSearchfileSources); src != nil {
+		if src := sf.ChildByName(TagPartfileSourceCount); src != nil {
 			entry.Sources = uint32(src.UintValue())
 		}
 		results = append(results, entry)
@@ -416,11 +454,12 @@ func (c *Client) DownloadSearchResult(hash string, categoryIdx int) error {
 	var h [16]byte
 	fmt.Sscanf(hash, "%16x", &h)
 
+	searchTag := Tag{Name: TagSearchfile, Type: TagTypeHash16, Data: h}
+	searchTag.Children = []Tag{newUint32Tag(TagPartfileCat, uint32(categoryIdx))}
 	_, err := c.conn.SendRequest(&Packet{
 		OpCode: OpMiscData,
 		Tags: []Tag{
-			Tag{Name: TagSearchfileHash, Type: TagTypeHash16, Data: h},
-			newUint32Tag(TagPartfileCat, uint32(categoryIdx)),
+			searchTag,
 		},
 	})
 	return err
@@ -484,9 +523,45 @@ func (c *Client) GetStatsTree() ([]Tag, error) {
 
 func (c *Client) DisconnectED2K() error {
 	_, err := c.conn.SendRequest(&Packet{
-		OpCode: OpMiscData,
+		OpCode: OpDisconnect,
+	})
+	return err
+}
+
+func (c *Client) ConnectED2K() error {
+	_, err := c.conn.SendRequest(&Packet{
+		OpCode: OpConnect,
+	})
+	return err
+}
+
+func (c *Client) AddServer(address, name string) error {
+	tags := []Tag{newStringTag(TagServerAddress, address)}
+	if name != "" {
+		tags = append(tags, newStringTag(TagServerName, name))
+	}
+	_, err := c.conn.SendRequest(&Packet{
+		OpCode: OpServerAdd,
+		Tags:   tags,
+	})
+	return err
+}
+
+func (c *Client) ConnectToServer(address string) error {
+	_, err := c.conn.SendRequest(&Packet{
+		OpCode: OpServerConnect,
 		Tags: []Tag{
-			newUint32Tag(TagPartfileStatus, 0),
+			{Name: TagServer, Type: TagTypeIPV4, Data: address},
+		},
+	})
+	return err
+}
+
+func (c *Client) RemoveServer(address string) error {
+	_, err := c.conn.SendRequest(&Packet{
+		OpCode: OpServerRemove,
+		Tags: []Tag{
+			{Name: TagServer, Type: TagTypeIPV4, Data: address},
 		},
 	})
 	return err
