@@ -188,10 +188,8 @@ func (c *Client) GetDownloads() ([]DownloadEntry, error) {
 				entry.Category = fmt.Sprintf("%d", cat.UintValue())
 			}
 		}
-		if paused := pf.ChildByName(TagPartfileStopped); paused != nil {
-			entry.Paused = paused.UintValue() == 1
-		} else if paused := pf.ChildByName(TagPartfilePaused); paused != nil {
-			entry.Paused = paused.UintValue() == 1
+		if stopped := pf.ChildByName(TagPartfileStopped); stopped != nil {
+			entry.Paused = stopped.UintValue() == 1
 		}
 
 		if entry.Size > 0 {

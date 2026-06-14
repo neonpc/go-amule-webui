@@ -23,16 +23,17 @@ var upgrader = websocket.Upgrader{
 }
 
 type Server struct {
-	client     *ec.Client
-	mu         sync.RWMutex
-	amuleHost  string
-	amulePort  int
-	amulePass  string
-	listenAddr string
-	authToken  string
-	clients    map[chan []byte]struct{}
-	register   chan chan []byte
-	unregister chan chan []byte
+	client      *ec.Client
+	mu          sync.RWMutex
+	amuleHost   string
+	amulePort   int
+	amulePass   string
+	listenAddr  string
+	authToken   string
+	clients     map[chan []byte]struct{}
+	register    chan chan []byte
+	unregister  chan chan []byte
+	pausedHashes map[string]bool
 }
 
 func NewServer(host string, port int, pass string, listen string) *Server {
@@ -46,7 +47,8 @@ func NewServer(host string, port int, pass string, listen string) *Server {
 		authToken:  hex.EncodeToString(buf),
 		clients:    make(map[chan []byte]struct{}),
 		register:   make(chan chan []byte),
-		unregister: make(chan chan []byte),
+		unregister:   make(chan chan []byte),
+		pausedHashes: make(map[string]bool),
 	}
 }
 
@@ -228,10 +230,25 @@ func (s *Server) handleDownloads(w http.ResponseWriter, r *http.Request) {
 		switch action {
 		case "pause":
 			err = c.PauseDownload(hash)
+			if err == nil {
+				s.mu.Lock()
+				s.pausedHashes[hash] = true
+				s.mu.Unlock()
+			}
 		case "resume":
 			err = c.ResumeDownload(hash)
+			if err == nil {
+				s.mu.Lock()
+				delete(s.pausedHashes, hash)
+				s.mu.Unlock()
+			}
 		case "cancel":
 			err = c.CancelDownload(hash)
+			if err == nil {
+				s.mu.Lock()
+				delete(s.pausedHashes, hash)
+				s.mu.Unlock()
+			}
 		default:
 			sendError(w, http.StatusBadRequest, "unknown action: "+action)
 			return
@@ -251,6 +268,14 @@ func (s *Server) handleDownloads(w http.ResponseWriter, r *http.Request) {
 	if dl == nil {
 		dl = []ec.DownloadEntry{}
 	}
+	s.mu.RLock()
+	for i := range dl {
+		if s.pausedHashes[dl[i].Hash] {
+			dl[i].Paused = true
+			dl[i].Status = "paused"
+		}
+	}
+	s.mu.RUnlock()
 	sendJSON(w, dl)
 }
 
