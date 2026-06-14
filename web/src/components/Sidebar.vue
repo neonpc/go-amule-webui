@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 
 const router = useRouter()
@@ -18,6 +18,11 @@ const navItems = [
   { path: '/log', label: 'Log', icon: '📝' },
 ]
 
+const currentLabel = computed(() => {
+  const item = navItems.find(i => i.path === route.path)
+  return item ? item.label : ''
+})
+
 function navigate(path: string) {
   router.push(path)
   open.value = false
@@ -25,11 +30,14 @@ function navigate(path: string) {
 </script>
 
 <template>
-  <button class="hamburger" @click="open = !open" aria-label="Toggle menu">
-    <span class="hamburger-line" :class="{ open }" />
-    <span class="hamburger-line" :class="{ open }" />
-    <span class="hamburger-line" :class="{ open }" />
-  </button>
+  <header class="mobile-bar">
+    <button class="hamburger" @click="open = !open" aria-label="Toggle menu">
+      <span class="hamburger-line" :class="{ open }" />
+      <span class="hamburger-line" :class="{ open }" />
+      <span class="hamburger-line" :class="{ open }" />
+    </button>
+    <span class="mobile-title">{{ currentLabel }}</span>
+  </header>
 
   <div v-if="open" class="overlay" @click="open = false" />
 
@@ -55,14 +63,8 @@ function navigate(path: string) {
 <style scoped>
 .hamburger {
   display: none;
-  position: fixed;
-  top: 10px;
-  left: 10px;
-  z-index: 200;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px;
+  background: none;
+  border: none;
   cursor: pointer;
   flex-direction: column;
   gap: 4px;
@@ -70,6 +72,12 @@ function navigate(path: string) {
   justify-content: center;
   width: 38px;
   height: 38px;
+  padding: 8px;
+  border-radius: 8px;
+}
+
+.hamburger:hover {
+  background: var(--bg-hover);
 }
 
 .hamburger-line {
@@ -89,6 +97,10 @@ function navigate(path: string) {
 }
 .hamburger-line.open:nth-child(3) {
   transform: translateY(-6px) rotate(-45deg);
+}
+
+.mobile-bar {
+  display: none;
 }
 
 .overlay {
@@ -156,19 +168,41 @@ function navigate(path: string) {
     display: flex;
   }
 
+  .mobile-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 50px;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+    z-index: 200;
+    padding: 0 8px;
+  }
+
+  .mobile-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text);
+  }
+
   .overlay {
     display: block;
     position: fixed;
     inset: 0;
+    top: 50px;
     background: rgba(0,0,0,0.5);
     z-index: 99;
   }
 
   .sidebar {
     position: fixed;
-    top: 0;
+    top: 50px;
     left: 0;
-    height: 100vh;
+    height: calc(100vh - 50px);
     z-index: 100;
     transform: translateX(-100%);
     width: 280px;
@@ -180,7 +214,7 @@ function navigate(path: string) {
   }
 
   .sidebar-header {
-    padding: 16px 20px;
+    padding: 14px 16px;
   }
 
   .sidebar-header h2 {

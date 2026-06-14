@@ -29,6 +29,7 @@ Latest stable: **v0.1.1** — see [releases](https://github.com/neonpc/go-amule-
 - Application log viewer
 - Preferences viewer (read-only)
 - **Responsive design** — collapsible sidebar drawer on mobile, card layout on small screens
+- **PWA** — installable on mobile/home screen, offline-capable via service worker
 - Real-time updates via WebSocket with auto-reconnect
 - Dark theme UI
 
@@ -39,6 +40,7 @@ Latest stable: **v0.1.1** — see [releases](https://github.com/neonpc/go-amule-
 | Backend | Go 1.24 |
 | Frontend | Vue 3, Vue Router 4, Pinia, TypeScript |
 | Build | Vite |
+| PWA | vite-plugin-pwa, Workbox |
 | Charts | Chart.js + vue-chartjs |
 | WebSocket | gorilla/websocket |
 | Styling | Scoped CSS with CSS custom properties (dark theme) |
