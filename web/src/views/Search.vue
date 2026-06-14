@@ -7,9 +7,16 @@ const store = useAmuleStore()
 
 const query = ref(store.searchQuery)
 const searchType = ref(store.searchType)
-const extFilter = ref(store.searchExtFilter)
 const results = ref(store.searchResults)
 const searching = ref(store.searchActive)
+
+const nameFilter = ref('')
+const extFilter = ref(store.searchExtFilter)
+const minSize = ref<number | null>(null)
+const maxSize = ref<number | null>(null)
+const minSizeUnit = ref<'MB' | 'GB'>('MB')
+const maxSizeUnit = ref<'MB' | 'GB'>('MB')
+
 const sortBy = ref<'name' | 'size' | 'sources'>('sources')
 const sortDir = ref<'asc' | 'desc'>('desc')
 const page = ref(0)
@@ -36,13 +43,30 @@ onUnmounted(() => {
   if (pollTimer) clearTimeout(pollTimer)
 })
 
+function toBytes(val: number | null, unit: 'MB' | 'GB'): number | null {
+  if (val === null || val <= 0) return null
+  return unit === 'GB' ? val * 1073741824 : val * 1048576
+}
+
 const filtered = computed(() => {
-  if (!extFilter.value) return results.value
-  const ext = extFilter.value.toLowerCase().replace(/^\./, '')
-  return results.value.filter(r => {
-    const name = r.name.toLowerCase()
-    return name.endsWith(`.${ext}`)
-  })
+  let arr = results.value
+  const lowerName = nameFilter.value.toLowerCase().trim()
+  if (lowerName) {
+    arr = arr.filter(r => r.name.toLowerCase().includes(lowerName))
+  }
+  const ext = extFilter.value.toLowerCase().trim().replace(/^\./, '')
+  if (ext) {
+    arr = arr.filter(r => r.name.toLowerCase().includes(`.${ext}`))
+  }
+  const minBytes = toBytes(minSize.value, minSizeUnit.value)
+  const maxBytes = toBytes(maxSize.value, maxSizeUnit.value)
+  if (minBytes !== null) {
+    arr = arr.filter(r => r.size >= minBytes)
+  }
+  if (maxBytes !== null) {
+    arr = arr.filter(r => r.size <= maxBytes)
+  }
+  return arr
 })
 
 function sortByColumn(col: 'name' | 'size' | 'sources') {
@@ -154,17 +178,39 @@ function sortIcon(col: string): string {
 <template>
   <div class="search-page">
     <div class="search-bar">
-      <input v-model="query" @keyup.enter="doSearch" placeholder="Search files..." :disabled="searching" />
-      <input v-model="extFilter" placeholder="Filter by ext (e.g. mp4)" class="ext-input" :disabled="searching" />
+      <input v-model="query" @keyup.enter="doSearch" placeholder="Search files..." :disabled="searching" class="search-input" />
       <select v-model="searchType" class="search-type" :disabled="searching">
         <option v-for="t in searchTypes" :key="t.value" :value="t.value">{{ t.label }}</option>
       </select>
       <button v-if="!searching" @click="doSearch">Search</button>
       <button v-else class="btn-cancel" @click="cancelSearch">Stop</button>
     </div>
+
+    <div v-if="results.length > 0" class="filter-bar">
+      <input v-model="nameFilter" placeholder="Filter name..." class="filter-input" />
+      <input v-model="extFilter" placeholder="Extension (e.g. mp4)" class="filter-input filter-ext" />
+      <div class="size-filter">
+        <input v-model.number="minSize" type="number" min="0" placeholder="Min" class="filter-input size-input" />
+        <select v-model="minSizeUnit" class="size-unit">
+          <option value="MB">MB</option>
+          <option value="GB">GB</option>
+        </select>
+      </div>
+      <div class="size-filter">
+        <input v-model.number="maxSize" type="number" min="0" placeholder="Max" class="filter-input size-input" />
+        <select v-model="maxSizeUnit" class="size-unit">
+          <option value="MB">MB</option>
+          <option value="GB">GB</option>
+        </select>
+      </div>
+    </div>
+
     <div v-if="searching" class="search-status">Searching... ({{ results.length }} results)</div>
-    <div v-if="extFilter && results.length" class="search-status">Filtered: {{ filtered.length }} / {{ results.length }}</div>
+    <div v-if="filtered.length !== results.length && results.length" class="search-status">
+      Filtered: {{ filtered.length }} / {{ results.length }}
+    </div>
     <div v-if="dlFeedback" class="dl-feedback" :class="{ success: !dlFeedback.startsWith('Failed') }">{{ dlFeedback }}</div>
+
     <div v-if="filtered.length > 0" class="results-container">
       <div class="table-wrap">
         <table>
@@ -202,21 +248,22 @@ function sortIcon(col: string): string {
 <style scoped>
 .search-page { display: flex; flex-direction: column; height: 100%; }
 .search-bar { position: sticky; top: 0; z-index: 10; background: var(--bg); display: flex; gap: 8px; padding: 8px 0; }
-input { flex: 1; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-card); color: var(--text); min-width: 0; }
-.ext-input { flex: 0 0 140px; }
+input { padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-card); color: var(--text); min-width: 0; }
 select { padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-card); color: var(--text); cursor: pointer; }
 button { padding: 10px 20px; background: var(--accent); color: white; border: none; border-radius: 8px; cursor: pointer; white-space: nowrap; }
-
-@media (max-width: 768px) {
-  .search-bar { flex-wrap: wrap; }
-  .search-bar input { flex: 1 1 100%; order: 2; }
-  .ext-input { flex: 1 1 auto; order: 3; min-width: 0; }
-  .search-bar select { flex: 0 1 auto; order: 4; }
-  .search-bar button { flex: 0 1 auto; order: 5; }
-  .cell-name { max-width: 180px; }
-}
 button:disabled { opacity: 0.5; cursor: default; }
 .btn-cancel { background: #ef4444; }
+
+.search-input { flex: 1; }
+.search-type { flex: 0 0 110px; }
+
+.filter-bar { display: flex; gap: 8px; padding: 4px 0 8px; flex-wrap: wrap; }
+.filter-input { flex: 1; min-width: 120px; }
+.filter-ext { flex: 0 0 140px; }
+.size-filter { display: flex; gap: 4px; align-items: center; }
+.size-input { width: 80px; flex: none; }
+.size-unit { width: 60px; flex: none; padding: 10px 6px; }
+
 .search-status { color: var(--text-muted); font-size: 0.85rem; padding: 4px 0; }
 .dl-feedback { padding: 6px 12px; border-radius: 6px; font-size: 0.85rem; margin: 4px 0; }
 .dl-feedback.success { background: #16a34a22; color: #16a34a; }
@@ -233,4 +280,16 @@ th { position: sticky; top: 0; background: var(--bg); color: var(--text-muted); 
 .pager { display: flex; align-items: center; justify-content: center; gap: 16px; padding: 12px 0; }
 .pager button { padding: 6px 16px; font-size: 0.85rem; }
 .pager span { font-size: 0.85rem; color: var(--text-muted); }
+
+@media (max-width: 768px) {
+  .search-bar { flex-wrap: wrap; }
+  .search-input { flex: 1 1 100%; }
+  .search-type { flex: 0 1 auto; }
+  .filter-bar { flex-direction: column; }
+  .filter-input { width: 100%; min-width: 0; }
+  .filter-ext { flex: none; }
+  .size-filter { width: 100%; }
+  .size-input { flex: 1; }
+  .cell-name { max-width: 180px; }
+}
 </style>
