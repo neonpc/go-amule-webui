@@ -1,11 +1,15 @@
 <script setup lang="ts">
+import { useRoute } from 'vue-router'
 import Sidebar from './components/Sidebar.vue'
+
+const route = useRoute()
+const isLogin = () => route.name === 'login'
 </script>
 
 <template>
   <div class="app-layout">
-    <Sidebar />
-    <main class="main-content">
+    <Sidebar v-if="!isLogin()" />
+    <main class="main-content" :class="{ 'login-mode': isLogin() }">
       <router-view />
     </main>
   </div>
@@ -52,9 +56,16 @@ body {
   flex-direction: column;
 }
 
+.main-content.login-mode {
+  padding: 0;
+}
+
 @media (max-width: 768px) {
   .main-content {
     padding: 74px 16px 16px 16px;
+  }
+  .main-content.login-mode {
+    padding: 0;
   }
 }
 

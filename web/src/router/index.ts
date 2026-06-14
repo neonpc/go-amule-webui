@@ -1,8 +1,10 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { hasToken } from '../lib/api'
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
+    { path: '/login', name: 'login', component: () => import('../views/Login.vue') },
     { path: '/', name: 'dashboard', component: () => import('../views/Dashboard.vue') },
     { path: '/downloads', name: 'downloads', component: () => import('../views/Downloads.vue') },
     { path: '/uploads', name: 'uploads', component: () => import('../views/Uploads.vue') },
@@ -14,6 +16,12 @@ const router = createRouter({
     { path: '/log', name: 'log', component: () => import('../views/Log.vue') },
     { path: '/prefs', name: 'prefs', component: () => import('../views/Preferences.vue') },
   ],
+})
+
+router.beforeEach((to) => {
+  if (to.name !== 'login' && !hasToken()) {
+    return { name: 'login' }
+  }
 })
 
 export default router

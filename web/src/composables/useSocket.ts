@@ -1,4 +1,5 @@
 import { ref, onMounted, onUnmounted } from 'vue'
+import { getToken } from '../lib/api'
 
 interface WSEvent {
   type: string
@@ -13,8 +14,11 @@ export function useSocket() {
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
   function connect() {
+    const token = getToken()
+    if (!token) return
+
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const url = `${protocol}//${location.host}/ws`
+    const url = `${protocol}//${location.host}/ws?token=${encodeURIComponent(token)}`
     ws = new WebSocket(url)
 
     ws.onopen = () => {

@@ -71,16 +71,43 @@ export interface Prefs {
 }
 
 const BASE = ''
+const TOKEN_KEY = 'amule_webui_token'
+
+export function getToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY)
+}
+
+export function setToken(token: string) {
+  localStorage.setItem(TOKEN_KEY, token)
+}
+
+export function clearToken() {
+  localStorage.removeItem(TOKEN_KEY)
+}
+
+export function hasToken(): boolean {
+  return !!getToken()
+}
 
 async function fetchJSON<T>(url: string, opts?: RequestInit): Promise<T> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 15000)
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const token = getToken()
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
   const res = await fetch(`${BASE}${url}`, {
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     ...opts,
     signal: controller.signal,
   })
   clearTimeout(timer)
+  if (res.status === 401) {
+    clearToken()
+    window.location.href = '/login'
+    throw new Error('unauthorized')
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }))
     throw new Error(err.error || res.statusText)
@@ -89,6 +116,13 @@ async function fetchJSON<T>(url: string, opts?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  login: (password: string) =>
+    fetchJSON<{ token: string }>('/api/login', {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    }),
+  verify: () =>
+    fetchJSON<{ status: string }>('/api/status'),
   status: () => fetchJSON<Status>('/api/status'),
   downloads: () => fetchJSON<Download[]>('/api/downloads'),
   downloadAction: (hash: string, action: string) =>

@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -27,17 +29,21 @@ type Server struct {
 	amulePort  int
 	amulePass  string
 	listenAddr string
+	authToken  string
 	clients    map[chan []byte]struct{}
 	register   chan chan []byte
 	unregister chan chan []byte
 }
 
 func NewServer(host string, port int, pass string, listen string) *Server {
+	buf := make([]byte, 32)
+	rand.Read(buf)
 	return &Server{
 		amuleHost:  host,
 		amulePort:  port,
 		amulePass:  pass,
 		listenAddr: listen,
+		authToken:  hex.EncodeToString(buf),
 		clients:    make(map[chan []byte]struct{}),
 		register:   make(chan chan []byte),
 		unregister: make(chan chan []byte),
@@ -66,23 +72,24 @@ func (s *Server) Run() error {
 	mux := http.NewServeMux()
 
 	apiMux := http.NewServeMux()
-	apiMux.HandleFunc("/status", s.handleStatus)
-	apiMux.HandleFunc("/downloads", s.handleDownloads)
-	apiMux.HandleFunc("/uploads", s.handleUploads)
-	apiMux.HandleFunc("/shared", s.handleShared)
-	apiMux.HandleFunc("/search", s.handleSearch)
-	apiMux.HandleFunc("/search/results", s.handleSearchResults)
-	apiMux.HandleFunc("/search/stop", s.handleSearchStop)
-	apiMux.HandleFunc("/servers", s.handleServers)
-	apiMux.HandleFunc("/servers/add", s.handleServerAdd)
-	apiMux.HandleFunc("/servers/connect", s.handleServerConnect)
-	apiMux.HandleFunc("/servers/remove", s.handleServerRemove)
-	apiMux.HandleFunc("/search/download", s.handleSearchDownload)
-	apiMux.HandleFunc("/ed2k", s.handleED2K)
-	apiMux.HandleFunc("/kad", s.handleKad)
-	apiMux.HandleFunc("/stats", s.handleStats)
-	apiMux.HandleFunc("/log", s.handleLog)
-	apiMux.HandleFunc("/fs/browse", s.handleFSBrowse)
+	apiMux.HandleFunc("/login", s.handleLogin)
+	apiMux.HandleFunc("/status", s.authMiddleware(s.handleStatus))
+	apiMux.HandleFunc("/downloads", s.authMiddleware(s.handleDownloads))
+	apiMux.HandleFunc("/uploads", s.authMiddleware(s.handleUploads))
+	apiMux.HandleFunc("/shared", s.authMiddleware(s.handleShared))
+	apiMux.HandleFunc("/search", s.authMiddleware(s.handleSearch))
+	apiMux.HandleFunc("/search/results", s.authMiddleware(s.handleSearchResults))
+	apiMux.HandleFunc("/search/stop", s.authMiddleware(s.handleSearchStop))
+	apiMux.HandleFunc("/servers", s.authMiddleware(s.handleServers))
+	apiMux.HandleFunc("/servers/add", s.authMiddleware(s.handleServerAdd))
+	apiMux.HandleFunc("/servers/connect", s.authMiddleware(s.handleServerConnect))
+	apiMux.HandleFunc("/servers/remove", s.authMiddleware(s.handleServerRemove))
+	apiMux.HandleFunc("/search/download", s.authMiddleware(s.handleSearchDownload))
+	apiMux.HandleFunc("/ed2k", s.authMiddleware(s.handleED2K))
+	apiMux.HandleFunc("/kad", s.authMiddleware(s.handleKad))
+	apiMux.HandleFunc("/stats", s.authMiddleware(s.handleStats))
+	apiMux.HandleFunc("/log", s.authMiddleware(s.handleLog))
+	apiMux.HandleFunc("/fs/browse", s.authMiddleware(s.handleFSBrowse))
 	mux.Handle("/api/", http.StripPrefix("/api", corsMiddleware(apiMux)))
 	mux.HandleFunc("/ws", s.handleWS)
 
@@ -119,13 +126,50 @@ func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		sendError(w, 405, "method not allowed")
+		return
+	}
+	var body struct {
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sendError(w, 400, "invalid request body")
+		return
+	}
+	if body.Password != s.amulePass {
+		sendError(w, 401, "invalid password")
+		return
+	}
+	sendJSON(w, map[string]string{"token": s.authToken})
+}
+
+func (s *Server) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		auth := r.Header.Get("Authorization")
+		if auth == "" {
+			// Also check query param for WebSocket
+			auth = r.URL.Query().Get("token")
+			if auth != "" {
+				auth = "Bearer " + auth
+			}
+		}
+		if auth != "Bearer "+s.authToken {
+			sendError(w, 401, "unauthorized")
+			return
+		}
+		next(w, r)
+	}
 }
 
 func sendJSON(w http.ResponseWriter, v interface{}) {
@@ -631,6 +675,11 @@ func (s *Server) handleFSBrowse(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
+	token := r.URL.Query().Get("token")
+	if token != s.authToken {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("WS upgrade: %v", err)
